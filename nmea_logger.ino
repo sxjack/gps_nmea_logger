@@ -66,7 +66,7 @@ const int status_LED = 6, LED_sense = 0;
 
 #elif defined(ARDUINO_AVR_PRO) || defined(ARDUINO_AVR_UNO)
 
-#define SD_BUFFER_SIZE      384
+#define SD_BUFFER_SIZE      256
 #define GPS_SERIAL       Serial
 #define SD_CS                10
 #define BAUD_RATE         19200
