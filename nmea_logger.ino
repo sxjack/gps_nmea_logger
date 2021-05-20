@@ -11,20 +11,22 @@
  *
  * Notes
  *
- * OpenLog: TBD
+ * OpenLog: Tested on a SparkFun unit.
  *
  * SAMD21:  Used for development.
  *          Works with the standard SD library and SdFat 2.0.6. 
  *
- * ESP32:   The standard SD library on the ESP32 doesn't open the file for writing at the end like it
- *          is supposed to do.
+ * ESP32:   Works with the standard library.
+ *          SdFat 2.0.6 doesn't seem to work.
  *
  * STM32F1: Won't compile with the standard SD library.
- *          SdFat 2015.4.26 doesn't seem to work.
- *          SdFat 2.0.6 to be tested.
+ *          Works with SdFat 2.0.6.
  *          Turn on USB Serial if using SdFat as it wants a Serial.
  *          Set U(S)ART to no generic serial.
  *
+ * This program opens and closes the file everytime that it needs to write to it.
+ * This is OK when we have a large buffer and are only writing every few seconds,
+ * may need to rethink for the small AVRs.
  *
  */
 
@@ -32,21 +34,21 @@
 
 #include <Arduino.h>
 
-#include <SPI.h>
-
-#define USE_SDFAT 1
-
-#if USE_SDFAT
-#include <SdFat.h>
-#else
-#include <SD.h>
-#endif
-
 //
 
 #define CONFIG_GPS            1
 #define SATS_THRESHOLD        7
-#define RX_BUFFER_SIZE      128
+#define RX_BUFFER_SIZE      100
+
+// Processor specific configuration.
+
+#if defined(ARDUINO_ESP32_DEV)
+#define USE_SDFAT             0
+#define FILE_MODE   FILE_APPEND
+#else
+#define USE_SDFAT             1
+#define FILE_MODE    FILE_WRITE
+#endif
 
 #if defined(ARDUINO_ARCH_SAMD)
 
@@ -64,7 +66,7 @@ const int status_LED = 6, LED_sense = 0;
 
 #elif defined(ARDUINO_AVR_PRO) || defined(ARDUINO_AVR_UNO)
 
-#define SD_BUFFER_SIZE      256
+#define SD_BUFFER_SIZE      384
 #define GPS_SERIAL       Serial
 #define SD_CS                10
 #define BAUD_RATE         19200
@@ -76,7 +78,6 @@ const int status_LED = 5, LED_sense = 0;
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial2
-#define SD_CS                 5
 #define BAUD_RATE         38400
 #define GPS_RATE            500 // ms
 #define DEBUG_SERIAL     Serial
@@ -86,10 +87,6 @@ const int status_LED = 5, LED_sense = 0;
 const int status_LED = 2, LED_sense = 0;
 
 #elif defined(ARDUINO_BLUEPILL_F103C8) || defined(ARDUINO_BLUEPILL_F103CB)
-
-#if not defined(SdFat_h)
-#error "The standard SD library doesn\'t work with the Blue Pill."
-#endif
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial1
@@ -109,6 +106,16 @@ HardwareSerial Serial2(PA3,PA2);
 
 #error "No configuration for this processor."
 
+#endif
+
+//
+
+#include <SPI.h>
+
+#if USE_SDFAT
+#include <SdFat.h>
+#else
+#include <SD.h>
 #endif
 
 //
@@ -135,9 +142,10 @@ SdFat           SD;
 
 void setup() {
 
-  int  i;
-  char text[128], text2[32];
-  File root, file;
+  int         i;
+  char        text[128], text2[32];
+  File        root, file;
+  const char *root_s = "/";
 
   text[0]  = i = 0;
   text2[0] = text2[sizeof(text2) - 1] = 0;
@@ -197,13 +205,17 @@ void setup() {
   pinMode(SD_CS,OUTPUT);
 #endif
 
+#if defined(ARDUINO_ESP32_DEV)
+  if (SD.begin()) {
+#else
   if (SD.begin(SD_CS)) {
+#endif
 
     SD_enabled = 1;
 
     delay(100);
 
-    if (root = SD.open("/")) {
+    if (root = SD.open(root_s)) {
 
       while (file = root.openNextFile()) {
 
@@ -217,12 +229,17 @@ void setup() {
 #if defined(DEBUG_SERIAL)
         DEBUG_SERIAL.print(text);
 #endif
-
         file.close();
       }
 
       root.close();
     }
+ 
+#if defined(DEBUG_SERIAL)
+  } else {
+  
+    DEBUG_SERIAL.print("SD.begin() failed\r\n");
+#endif
   }
 
   digitalWrite(status_LED,0 ^ LED_sense);
@@ -245,6 +262,7 @@ void loop() {
   static int16_t   rx_index = 0, sd_index = 0, read_mode = 0, 
                    satellites = 0, fix = 0;
   static uint16_t  nmea_csum = 0;
+  static uint32_t  last_write = 0;
   static File      output;
 #if defined (FIX_LED)
   uint32_t         msecs;
@@ -341,7 +359,6 @@ void loop() {
         
         section    = &rx_buffer_s[rx_index + 1];
         nmea_csum ^= u8;
-
         break;
 
       case 10: // LF
@@ -370,10 +387,12 @@ void loop() {
 
               digitalWrite(status_LED,1 ^ LED_sense);
 
-              if (output = SD.open(filename,FILE_WRITE)) {
+              if (output = SD.open(filename,FILE_MODE)) {
 
                 output.write((uint8_t *) sd_buffer,sd_index);
                 output.close();
+
+                last_write = millis();
               }
 
               digitalWrite(status_LED,0 ^ LED_sense);
@@ -388,15 +407,12 @@ void loop() {
         }
  
         rx_index = read_mode = 0;
-
         break;
 
       case '*':
 
         check = &rx_buffer_s[rx_index + 1];
-
         sprintf(nmea_csum_s,"%02X",nmea_csum);
-        
         break;
 
       default:
