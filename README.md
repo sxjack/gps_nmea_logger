@@ -19,4 +19,6 @@ Hardware
 * BN-220
 * FTDI USB/serial interface
 
-
+The standard OpenLog firmware is available at https://github.com/sparkfun/OpenLog. 
+A diagram showing how to connect an OpenLog to an FTDI is in the documentation
+directory.
