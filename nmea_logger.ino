@@ -12,6 +12,7 @@
  * Notes
  *
  * OpenLog: Tested on a SparkFun unit.
+ *          Don't let the free RAM go below 600.
  *
  * SAMD21:  Used for development.
  *          Works with the standard SD library and SdFat 2.0.6. 
@@ -23,10 +24,6 @@
  *          Works with SdFat 2.0.6.
  *          Turn on USB Serial if using SdFat as it wants a Serial.
  *          Set U(S)ART to no generic serial.
- *
- * This program opens and closes the file everytime that it needs to write to it.
- * This is OK when we have a large buffer and are only writing every few seconds,
- * may need to rethink for the small AVRs.
  *
  */
 
@@ -86,21 +83,34 @@ const int status_LED = 5, LED_sense = 0;
 
 const int status_LED = 2, LED_sense = 0;
 
+#elif defined(ARDUINO_ARCH_ESP8266)
+
+#warning "Not tested on the ESP8266."
+
+#define SD_BUFFER_SIZE     4096
+#define GPS_SERIAL       Serial
+#define SD_CS                D8
+#define BAUD_RATE         38400
+#define GPS_RATE            500 // ms
+
+const int status_LED = D4, LED_sense = 0;
+
 #elif defined(ARDUINO_BLUEPILL_F103C8) || defined(ARDUINO_BLUEPILL_F103CB)
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial1
 #define SD_CS               PA4
-#define BAUD_RATE         38400
-#define GPS_RATE            500 // ms
-// #define DEBUG_SERIAL    Serial2
-#define PASSTHROUGH     Serial2
+#define BAUD_RATE         57600
+#define GPS_RATE            200 // ms
+#define DEBUG_SERIAL    Serial2
+#define PASSTHROUGH     Serial3
 #define PASSTHROUGH_BAUD 115200
 
 const int status_LED = PC13, LED_sense = 1;
 
 HardwareSerial Serial1(PA10,PA9);
 HardwareSerial Serial2(PA3,PA2);
+HardwareSerial Serial3(PB11,PB10);
 
 #else
 
@@ -127,7 +137,7 @@ void dateTimeCallback(uint16_t*,uint16_t*,uint8_t*);
 
 //
 
-static int      file_index = 0, SD_enabled = 0;
+static int      file_index = 0, SD_enabled = 0, est_write_rate = 0;
 static char     sd_buffer[SD_BUFFER_SIZE];
 static uint8_t  rx_buffer[RX_BUFFER_SIZE];
 static uint16_t hours = 0, minutes = 0, seconds = 0, years = 0, months = 0, days = 0;
@@ -145,12 +155,13 @@ void setup() {
   int         i;
   char        text[128], text2[32];
   File        root, file;
-  const char *root_s = "/";
 
   text[0]  = i = 0;
   text2[0] = text2[sizeof(text2) - 1] = 0;
     
   //
+
+  est_write_rate = (int) ((1000l * (long int) SD_BUFFER_SIZE) / (200l * 1000l / GPS_RATE)); // ms between writes.
 
   pinMode(status_LED,OUTPUT);
   digitalWrite(status_LED,1 ^ LED_sense);
@@ -181,7 +192,8 @@ void setup() {
 
   DEBUG_SERIAL.print("\r\nGPS NMEA Logger\r\n");
   DEBUG_SERIAL.print(__DATE__);
-  DEBUG_SERIAL.print("\r\n\n");
+  sprintf(text,"\r\n\nEst. %d ms between writes\r\n\n",est_write_rate);
+  DEBUG_SERIAL.print(text);
 
 #endif
 
@@ -205,17 +217,19 @@ void setup() {
   pinMode(SD_CS,OUTPUT);
 #endif
 
-#if defined(ARDUINO_ESP32_DEV)
-  if (SD.begin()) {
-#else
+#if defined(SD_CS)
   if (SD.begin(SD_CS)) {
+#else
+  if (SD.begin()) {
 #endif
 
     SD_enabled = 1;
 
+#if defined(DEBUG_SERIAL)
+
     delay(100);
 
-    if (root = SD.open(root_s)) {
+    if (root = SD.open("/")) {
 
       while (file = root.openNextFile()) {
 
@@ -225,17 +239,13 @@ void setup() {
 #else
         sprintf(text,"%-30s %12u\r\n",file.name(),file.size());
 #endif
-
-#if defined(DEBUG_SERIAL)
         DEBUG_SERIAL.print(text);
-#endif
         file.close();
       }
 
       root.close();
     }
- 
-#if defined(DEBUG_SERIAL)
+
   } else {
   
     DEBUG_SERIAL.print("SD.begin() failed\r\n");
@@ -262,10 +272,9 @@ void loop() {
   static int16_t   rx_index = 0, sd_index = 0, read_mode = 0, 
                    satellites = 0, fix = 0;
   static uint16_t  nmea_csum = 0;
-  static uint32_t  last_write = 0;
+  static uint32_t  msecs, last_write = 0;
   static File      output;
 #if defined (FIX_LED)
-  uint32_t         msecs;
   static uint8_t   led_phase = 0;
   static uint32_t  last_led_msecs = 0;
 #endif
@@ -387,11 +396,24 @@ void loop() {
 
               digitalWrite(status_LED,1 ^ LED_sense);
 
-              if (output = SD.open(filename,FILE_MODE)) {
+              if (!output) {
+
+                output = SD.open(filename,FILE_MODE);
+              }
+
+              if (output) {
 
                 output.write((uint8_t *) sd_buffer,sd_index);
-                output.close();
 
+                if (est_write_rate > 2000) {
+                  
+                  output.close();
+
+                } else {
+
+                  output.flush();
+                }
+                
                 last_write = millis();
               }
 
@@ -454,6 +476,15 @@ void loop() {
   }
 
 #endif
+
+  // This is probably redundant.
+
+  if ((output)&&(((msecs = millis()) - last_write) > 10000)) {
+
+    output.close();
+  }
+
+  // Once we have the date, sort out the output file name.
 
   if ((!filename[0])&&(years > 2000)&&(satellites > 3)) {
 
