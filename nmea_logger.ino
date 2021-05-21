@@ -93,8 +93,8 @@ const int status_LED = 2, LED_sense = 0;
 #define SD_CS               PA4
 #define BAUD_RATE         38400
 #define GPS_RATE            500 // ms
-#define DEBUG_SERIAL    Serial2
-//#define PASSTHROUGH     Serial2
+// #define DEBUG_SERIAL    Serial2
+#define PASSTHROUGH     Serial2
 #define PASSTHROUGH_BAUD 115200
 
 const int status_LED = PC13, LED_sense = 1;
@@ -540,11 +540,23 @@ void loop() {
 
 void config_gps() {
 
+  int             i, j;
   uint8_t        *tx_buffer;
   const uint8_t  
     ubx_cfg_rate[12] = "\x06\x08\x06\x00\xc8\x00\x01\x00\x01\x00",
     ubx_nav5_cfg[12] = "\x06\x24\x24\x00\x05\x00\x07\x02\x00\x00",
-    ubx_cfg_prt[26]  = "\x06\x00\x14\x00\x01\x00\x00\x00\xd0\x08\x00\x00\x00\x4b\x00\x00\x03\x00\x03\x00\x00\x00\x00\x00"; 
+    ubx_cfg_prt[26]  = "\x06\x00\x14\x00\x01\x00\x00\x00\xd0\x08\x00\x00\x00\x4b\x00\x00\x03\x00\x03\x00\x00\x00\x00\x00",
+    ubx_cfg_msg[14]  = "\x06\x01\x08\x00\xf0\x02\x00\x00\x00\x00\x00\x01";
+  struct messages {
+    uint8_t msg_class; 
+    uint8_t msg_id; 
+    uint8_t msg_rate;};
+  const struct messages 
+    gps_msgs[16] = {{0xf0, 0x0a,  0}, {0xf0, 0x09,  0}, {0xf0, 0x00,  1}, {0xf0, 0x01,  0}, // NMEA
+                    {0xf0, 0x40,  0}, {0xf0, 0x06,  0}, {0xf0, 0x02, 10}, {0xf0, 0x07,  0}, 
+                    {0xf0, 0x03,  0}, {0xf0, 0x04,  1}, {0xf0, 0x0e,  0}, {0xf0, 0x41, 10}, 
+                    {0xf0, 0x05,  0}, {0xf0, 0x08,  0},
+                    {0x00, 0x00,  0}};   
 
   //
 
@@ -602,6 +614,26 @@ void config_gps() {
   tx_buffer[7] = GPS_RATE >> 8;
 
   ublox_command(tx_buffer);
+
+  // Turn off unwanted messages.
+
+  memset(&tx_buffer[2],0,32);
+  memcpy(&tx_buffer[2],ubx_cfg_msg,sizeof(ubx_cfg_msg));
+
+  for (i = 0; gps_msgs[i].msg_class; ++i) {
+
+    delay(50);
+
+    tx_buffer[6] = gps_msgs[i].msg_class;
+    tx_buffer[7] = gps_msgs[i].msg_id;
+
+    for (j = 0; j < 6; ++j) {
+
+      tx_buffer[8 + j] = gps_msgs[i].msg_rate;
+    }
+
+    ublox_command(tx_buffer);
+  }
 
   //
   
