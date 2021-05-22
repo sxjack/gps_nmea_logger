@@ -14,16 +14,21 @@
  * OpenLog: Tested on a SparkFun unit.
  *          Don't let the free RAM go below 600.
  *
- * SAMD21:  Used for development.
- *          Works with the standard SD library and SdFat 2.0.6. 
- *
- * ESP32:   Works with the standard library.
- *          SdFat 2.0.6 doesn't seem to work.
- *
  * STM32F1: Won't compile with the standard SD library.
  *          Works with SdFat 2.0.6.
  *          Turn on USB Serial if using SdFat as it wants a Serial.
  *          Set U(S)ART to no generic serial.
+ *
+ * SAMD21:  Works with the standard SD library and SdFat 2.0.6. 
+ *
+ * ESP32:   Works with the standard library.
+ *          SdFat 2.0.6 doesn't seem to work.
+ *
+ * ESP8266: WeMos D1 Mini.
+ *          Seems to reboot after most writes to the SD card.
+ *          Tried both the standard and SdFat libraries.
+ *          Needs a reset on powerup to get the comms to the 
+ *          GPS going.
  *
  */
 
@@ -34,12 +39,11 @@
 //
 
 #define CONFIG_GPS            1
-#define SATS_THRESHOLD        7
 #define RX_BUFFER_SIZE      100
 
 // Processor specific configuration.
 
-#if defined(ARDUINO_ESP32_DEV)
+#if defined(ARDUINO_ARCH_ESP32)
 #define USE_SDFAT             0
 #define FILE_MODE   FILE_APPEND
 #else
@@ -68,8 +72,9 @@ const int status_LED = 6, LED_sense = 0;
 #define SD_CS                10
 #define BAUD_RATE         19200
 #define GPS_RATE            500 // ms
+#define FIX_LED               5
 
-const int status_LED = 5, LED_sense = 0;
+const int status_LED = 6, LED_sense = 0;
 
 #elif defined(ARDUINO_ESP32_DEV)
 
@@ -83,19 +88,22 @@ const int status_LED = 5, LED_sense = 0;
 
 const int status_LED = 2, LED_sense = 0;
 
-#elif defined(ARDUINO_ARCH_ESP8266)
+#elif defined(ARDUINO_ESP8266_WEMOS_D1MINI)
 
-#warning "Not tested on the ESP8266."
+#warning "Doesn't work properly on the ESP8266 WeMos D1 Mini."
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL       Serial
 #define SD_CS                D8
-#define BAUD_RATE         38400
+#define BAUD_RATE         19200
 #define GPS_RATE            500 // ms
 
-const int status_LED = D4, LED_sense = 0;
+// Don't use D4 for the status LED.
+const int status_LED = -1, LED_sense = 0;
 
 #elif defined(ARDUINO_BLUEPILL_F103C8) || defined(ARDUINO_BLUEPILL_F103CB)
+
+// Works well on the Blue Pill. 
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial1
@@ -132,6 +140,7 @@ HardwareSerial Serial3(PB11,PB10);
 
 void config_gps(void);
 void ublox_checksum(uint8_t *,uint8_t *,uint8_t *);
+void set_status_LED(int);
 
 void dateTimeCallback(uint16_t*,uint16_t*,uint8_t*);
 
@@ -163,8 +172,11 @@ void setup() {
 
   est_write_rate = (int) ((1000l * (long int) SD_BUFFER_SIZE) / (200l * 1000l / GPS_RATE)); // ms between writes.
 
-  pinMode(status_LED,OUTPUT);
-  digitalWrite(status_LED,1 ^ LED_sense);
+  if (status_LED >= 0) {
+
+    pinMode(status_LED,OUTPUT);
+    digitalWrite(status_LED,1 ^ LED_sense);
+  }
 
 #if defined(FIX_LED)
   pinMode(FIX_LED,OUTPUT);
@@ -214,7 +226,7 @@ void setup() {
 
 #if USE_SDFAT
   FsDateTime::setCallback(dateTimeCallback);
-  pinMode(SD_CS,OUTPUT);
+  // pinMode(SD_CS,OUTPUT);
 #endif
 
 #if defined(SD_CS)
@@ -252,7 +264,7 @@ void setup() {
 #endif
   }
 
-  digitalWrite(status_LED,0 ^ LED_sense);
+  set_status_LED(0);
 
   return;
 }
@@ -394,7 +406,7 @@ void loop() {
 
             if (len > (SD_BUFFER_SIZE - 4 - sd_index)) {
 
-              digitalWrite(status_LED,1 ^ LED_sense);
+              set_status_LED(1);
 
               if (!output) {
 
@@ -417,7 +429,7 @@ void loop() {
                 last_write = millis();
               }
 
-              digitalWrite(status_LED,0 ^ LED_sense);
+              set_status_LED(0);
 
               sd_index = 0;
             }
@@ -556,6 +568,20 @@ void loop() {
   }
 
 #endif
+
+  return;
+}
+
+/*
+ * 
+ */
+
+void set_status_LED(int state) {
+
+  if (status_LED >= 0) {
+
+    digitalWrite(status_LED,state ^ LED_sense);
+  }
 
   return;
 }
