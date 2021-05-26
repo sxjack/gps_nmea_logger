@@ -22,3 +22,7 @@ Hardware
 The standard OpenLog firmware is available at https://github.com/sparkfun/OpenLog. 
 A diagram showing how to connect an OpenLog to an FTDI is in the documentation
 directory.
+
+![OpenLog and BN-220](images/logger.jpg)
+
+![Logged data converted to gpx and displayed in Google Earth](images/gps_log.jpg)
