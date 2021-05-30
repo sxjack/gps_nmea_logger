@@ -13,9 +13,11 @@
  *
  * OpenLog: Tested on a SparkFun unit.
  *          Don't let the free RAM go below 600.
+ *          One of the OpenLogs that I have has the Uno bootloader,
+ *          the other thinks that it is a Pro Mini.
  *
- * STM32F1: Won't compile with the standard SD library.
- *          Works with SdFat 2.0.6.
+ * STM32F1: Works with the standard SD library (but lots of deprecated warnings).
+ *          Works with SdFat 2.0.6 (but may need a reduced SPI speed).
  *          Turn on USB Serial if using SdFat as it wants a Serial.
  *          Set U(S)ART to no generic serial.
  *
@@ -45,27 +47,14 @@
 
 #if defined(ARDUINO_ARCH_ESP32)
 #define USE_SDFAT             0
+// #define FILE_MODE    FILE_WRITE
 #define FILE_MODE   FILE_APPEND
 #else
 #define USE_SDFAT             1
 #define FILE_MODE    FILE_WRITE
 #endif
 
-#if defined(ARDUINO_ARCH_SAMD)
-
-#define SD_BUFFER_SIZE     4096
-#define GPS_SERIAL      Serial1
-#define SD_CS                 7
-#define BAUD_RATE         38400
-#define GPS_RATE            500 // ms
-// #define DEBUG_SERIAL  SerialUSB
-#define PASSTHROUGH   SerialUSB
-#define PASSTHROUGH_BAUD 115200
-#define FIX_LED               5
-
-const int status_LED = 6, LED_sense = 0;
-
-#elif defined(ARDUINO_AVR_PRO) || defined(ARDUINO_AVR_UNO)
+#if defined(ARDUINO_AVR_PRO) || defined(ARDUINO_AVR_UNO)
 
 #define SD_BUFFER_SIZE      256
 #define GPS_SERIAL       Serial
@@ -76,10 +65,32 @@ const int status_LED = 6, LED_sense = 0;
 
 const int status_LED = 6, LED_sense = 0;
 
+#elif defined(ARDUINO_SAMD_ZERO)
+
+#define SD_BUFFER_SIZE     4096
+#define GPS_SERIAL      Serial1
+#define BAUD_RATE         38400
+#define GPS_RATE            500 // ms
+#if defined(ADAFRUIT_FEATHER_M0)
+#define SD_CS                 4
+// #define SD_CD                 7
+// #define DEBUG_SERIAL     Serial
+#define PASSTHROUGH      Serial
+#else
+#define SD_CS                 7
+// #define DEBUG_SERIAL  SerialUSB
+#define PASSTHROUGH   SerialUSB
+#endif
+#define PASSTHROUGH_BAUD 115200
+#define FIX_LED               5
+
+const int status_LED = 6, LED_sense = 0;
+
 #elif defined(ARDUINO_ESP32_DEV)
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial2
+#define SD_CS                 5
 #define BAUD_RATE         38400
 #define GPS_RATE            500 // ms
 #define DEBUG_SERIAL     Serial
@@ -111,7 +122,7 @@ const int status_LED = -1, LED_sense = 0;
 #define BAUD_RATE         57600
 #define GPS_RATE            200 // ms
 #define DEBUG_SERIAL    Serial2
-#define PASSTHROUGH     Serial3
+#define PASSTHROUGH      Serial
 #define PASSTHROUGH_BAUD 115200
 
 const int status_LED = PC13, LED_sense = 1;
@@ -124,6 +135,10 @@ HardwareSerial Serial3(PB11,PB10);
 
 #error "No configuration for this processor."
 
+#endif
+
+#if USE_SDFAT && defined(SD_CS)
+#define SD_CONFIG SdSpiConfig(SD_CS,DEDICATED_SPI,SD_SCK_MHZ(16))
 #endif
 
 //
@@ -226,10 +241,13 @@ void setup() {
 
 #if USE_SDFAT
   FsDateTime::setCallback(dateTimeCallback);
-  // pinMode(SD_CS,OUTPUT);
 #endif
 
-#if defined(SD_CS)
+#if defined(SD_CONFIG)
+  if (SD.begin(SD_CONFIG)) {
+#elif defined(SD_CS)
+  // pinMode(SD_CS,OUTPUT);
+
   if (SD.begin(SD_CS)) {
 #else
   if (SD.begin()) {
@@ -344,7 +362,6 @@ void loop() {
             text[6] = 0; seconds = atoi(&text[4]);
             text[4] = 0; minutes = atoi(&text[2]);
             text[2] = 0; hours   = atoi(text);
-
             break;
 
           case 10:
@@ -353,7 +370,6 @@ void loop() {
             text[6] = 0; years  = atoi(&text[4]) + 2000;
             text[4] = 0; months = atoi(&text[2]);
             text[2] = 0; days   = atoi(text);
-
             break;
 
           default:
@@ -498,7 +514,9 @@ void loop() {
 
   // Once we have the date, sort out the output file name.
 
-  if ((!filename[0])&&(years > 2000)&&(satellites > 3)) {
+  if ((!filename[0])&&(years > 2000)&&
+      (fix)) {
+//      (satellites > 3)) {
 
     File file;
 
