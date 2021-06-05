@@ -9,6 +9,10 @@
  *
  * MIT licence.
  *
+ * Changes
+ * 
+ * June '21 Added filename options.
+ *
  * Notes
  *
  * OpenLog: Tested on a SparkFun unit.
@@ -42,6 +46,15 @@
 
 #define CONFIG_GPS            1
 #define RX_BUFFER_SIZE      100
+
+/*
+ * 0 -> YYYYMMDD.nnn, if FILENAME_EXTN is defined it will be added to the end.
+ * 2 -> LOGnnnnn.TXT (not implemented)
+ *
+*/
+#define FILENAME_STYLE        0
+#define FILENAME_EXTN    ".txt"
+#define FILENAME_LEN         20
 
 // Processor specific configuration.
 
@@ -165,6 +178,7 @@ static int      file_index = 0, SD_enabled = 0, est_write_rate = 0;
 static char     sd_buffer[SD_BUFFER_SIZE];
 static uint8_t  rx_buffer[RX_BUFFER_SIZE];
 static uint16_t hours = 0, minutes = 0, seconds = 0, years = 0, months = 0, days = 0;
+const char     *counter_filename = "/COUNTER.TXT";
 
 #if USE_SDFAT
 SdFat           SD;
@@ -273,6 +287,18 @@ void setup() {
         file.close();
       }
 
+#if FILENAME_STYLE == 2
+      if (file = SD.open(counter_filename,FILE_READ)) {
+
+        file.read(text,8);
+        
+        text[8]    = 0;
+        file_index = atoi(text);
+        
+        file.close();
+      }
+#endif
+      
       root.close();
     }
 
@@ -298,7 +324,7 @@ void loop() {
   uint8_t          u8;
   uint16_t         u16;
   static int       ublox_length = 0, commas = 0;
-  static char      filename[16] = {0}, nmea_csum_s[4]= {0}, *section, *check;
+  static char      filename[FILENAME_LEN] = {0}, nmea_csum_s[4]= {0}, *section, *check;
   static int16_t   rx_index = 0, sd_index = 0, read_mode = 0, 
                    satellites = 0, fix = 0;
   static uint16_t  nmea_csum = 0;
@@ -522,7 +548,14 @@ void loop() {
 
     for (i = 0; i < 1000; ++i, ++file_index) {
 
+#if FILENAME_STYLE == 2
+      sprintf(filename,"/LOG_%04d.TXT",file_index % 10000);
+#elif defined(FILENAME_EXTN) && USE_SDFAT
+      sprintf(filename,"/%04d%02d%02d.%03d%s",
+              years,months,days,file_index % 1000,FILENAME_EXTN);
+#else
       sprintf(filename,"/%04d%02d%02d.%03d",years,months,days,file_index % 1000);
+#endif
 
       if (file = SD.open(filename,FILE_READ)) {
 
@@ -533,7 +566,16 @@ void loop() {
         break;
       }
     }
-    
+
+#if FILENAME_STYLE == 2
+    if (file = SD.open(counter_filename,FILE_WRITE)) {
+
+      file.seek(0);
+      file.println(file_index);
+      file.close();
+    }
+#endif
+
 #if defined(DEBUG_SERIAL)
     sprintf(text,"\r\nLog file: \'%s\'\r\n",filename);
     DEBUG_SERIAL.print(text);
