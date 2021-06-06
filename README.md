@@ -2,7 +2,8 @@
 
 An Arduino program that logs NMEA data from a GPS to an SD card.
 
-Intended for use with OpenLog hardware. Developed using an Arduino Zero clone.
+Intended for use with OpenLog hardware.
+Developed using an STM32F1 'blue pill'.
 
 If the GPS takes Ublox commands and is on 9600 (eg a BN-220 out of the packet),
 it will be configured on startup for 3D airborne and the baud and update rates
@@ -18,6 +19,8 @@ Hardware
 * OpenLog
 * BN-220
 * FTDI USB/serial interface
+
+This program should be easy to port to any other Arduino with an SD module.
 
 The standard OpenLog firmware is available at https://github.com/sparkfun/OpenLog. 
 A diagram showing how to connect an OpenLog to an FTDI is in the documentation
