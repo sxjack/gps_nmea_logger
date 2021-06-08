@@ -29,7 +29,7 @@ print $^O . "\n";
 # The following is an attempt to get this script to execute using ActiveState perl on Windows.
 #
 
-if ($^O eq 'linux') {
+if (($^O eq 'linux')||($^O eq 'darwin')) {
 
     open($GPX,"> $gpx_file") || die "Cannot open GPX file: $!";
     open($TSV,"> $tsv_file") || die "Cannot open tsv file: $!";
@@ -191,8 +191,13 @@ EndOfFooter
 
 print STDERR "\n${lines} lines read, max line length was ${max_line_length}\n${longest_line}\n";
 
-print STDERR sprintf("%3d",$max_speed) . " knots\n";
-print STDERR sprintf("%3d m MSL (%d m AGL)\n",$max_alt_msl,$max_alt_msl - $base_alt);
+my $mph    = int($max_speed   * 1.15);
+my $kph    = int($max_speed   * 1.85);
+my $alt_ft = int($max_alt_msl * 3.28084);
+
+print STDERR sprintf("%3d knots (%d mph)\n",$max_speed,$mph);
+print STDERR sprintf("%3d m MSL (%d ft, %d m AGL)\n",
+                     $max_alt_msl,$alt_ft,$max_alt_msl - $base_alt);
 
 close $TSV;
 close $GPX;
