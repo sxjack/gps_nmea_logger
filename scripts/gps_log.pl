@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # -*- tab-width: 4; mode: perl; -*-
 #
-# A hack to convert a file of NMEA GGA and RMC records to a GFX file.
+# A hack to convert a file of NMEA GGA and RMC records to a GPX file.
 #
 #
 
@@ -15,18 +15,36 @@ my($zulu,$hours,$mins,$secs,$dsecs,$daysecs,$start,$elapsed,$offset);
 my($latitude,$ns,$longitude,$ew,$date,$time,$alt_msl,$speed,$heading,$sats) = (0.0,'N',0.0,'E','','',0,0,0,0);
 my($max_speed,$max_alt_msl,$base_alt) = (0,0,0);
 my($lines,$max_line_length,$longest_line) = (0,0,'');
+my($GPX,$TSV);
+
+my $gpx_file = 'gps_log.gpx';
+my $tsv_file = 'gps_log.tsv';
+my $encoding = ':encoding(UTF-8)';
 
 #
 
-open(GPX,"> gps_log.gpx") || die "Cannot open GPX file: $!";
+print $^O . "\n";
 
-open(TSV,"> gps_log.tsv") || die "Cannot open tsv file: $!";
+#
+# The following is an attempt to get this script to execute using ActiveState perl on Windows.
+#
 
-print TSV "zulu\telapsed\taltitude\tsats\thdop\tvdop\n";
+if ($^O eq 'linux') {
+
+    open($GPX,"> $gpx_file") || die "Cannot open GPX file: $!";
+    open($TSV,"> $tsv_file") || die "Cannot open tsv file: $!";
+
+} else {
+
+    open($GPX,"> $encoding",$gpx_file) || die "Cannot open GPX file: $!";
+    open($TSV,"> $encoding",$tsv_file) || die "Cannot open tsv file: $!";
+}
+
+print $TSV "zulu\telapsed\taltitude\tsats\thdop\tvdop\n";
 
 #
 
-print GPX <<EndOfHeader;
+print $GPX <<EndOfHeader;
 <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <gpx 
   version="1.0"
@@ -94,7 +112,7 @@ while (<>) {
                 $start = $daysecs;
             }
 
-            $elapsed = $daysecs - $start - $offset;
+            $elapsed = 0.1 * int(10 * (0.00001 + $daysecs - $start - $offset));
         }
 
         if ($raw_lat =~ /^(\d{2})(.*)$/) {
@@ -129,10 +147,10 @@ while (<>) {
 
             $zulu = "${date}T${time}Z";
             
-            print GPX sprintf("      <trkpt lat=\"%.6f\" lon=\"%.6f\">",$latitude,$longitude);
-            print GPX "<time>$zulu</time><ele>${alt_msl}</ele><speed>${speed}</speed><course>${heading}</course><sat>${sats}</sat></trkpt>\n";
+            print $GPX sprintf("      <trkpt lat=\"%.6f\" lon=\"%.6f\">",$latitude,$longitude);
+            print $GPX "<time>$zulu</time><ele>${alt_msl}</ele><speed>${speed}</speed><course>${heading}</course><sat>${sats}</sat></trkpt>\n";
 
-            print TSV "${zulu}\t${elapsed}\t${alt_msl}\t${sats}\t${hdop}\t${vdop}\n";
+            print $TSV "${zulu}\t${elapsed}\t${alt_msl}\t${sats}\t${hdop}\t${vdop}\n";
         }
     }
 
@@ -165,7 +183,7 @@ while (<>) {
 
 #
 
-print GPX <<EndOfFooter;
+print $GPX <<EndOfFooter;
     </trkseg>
   </trk>
 </gpx>
@@ -176,7 +194,7 @@ print STDERR "\n${lines} lines read, max line length was ${max_line_length}\n${l
 print STDERR sprintf("%3d",$max_speed) . " knots\n";
 print STDERR sprintf("%3d m MSL (%d m AGL)\n",$max_alt_msl,$max_alt_msl - $base_alt);
 
-close TSV;
-close GPX;
+close $TSV;
+close $GPX;
 
 __END__
