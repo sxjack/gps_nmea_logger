@@ -26,18 +26,19 @@ my $encoding = ':encoding(UTF-8)';
 print $^O . "\n";
 
 #
-# The following is an attempt to get this script to execute using ActiveState perl on Windows.
+# Windows perls (particularly the ActiveState one) seem to want the three parameter
+# version of open();
 #
 
-if (($^O eq 'linux')||($^O eq 'darwin')) {
-
-    open($GPX,"> $gpx_file") || die "Cannot open GPX file: $!";
-    open($TSV,"> $tsv_file") || die "Cannot open tsv file: $!";
-
-} else {
+if ($^O eq 'MSWin32') {
 
     open($GPX,"> $encoding",$gpx_file) || die "Cannot open GPX file: $!";
     open($TSV,"> $encoding",$tsv_file) || die "Cannot open tsv file: $!";
+
+} else { # 'linux', 'darwin' etc.
+
+    open($GPX,"> $gpx_file") || die "Cannot open GPX file: $!";
+    open($TSV,"> $tsv_file") || die "Cannot open tsv file: $!";
 }
 
 print $TSV "zulu\telapsed\taltitude\tsats\thdop\tvdop\n";
@@ -136,6 +137,8 @@ while (<>) {
         if (($base_alt == 0)&&($sats > 7)) {
 
             $base_alt = $alt_msl;
+
+            print STDERR "Assuming that ground is ${base_alt} m MSL.\n";
         }
         
         if ($alt_msl > $max_alt_msl) {
