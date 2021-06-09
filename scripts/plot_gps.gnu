@@ -1,5 +1,4 @@
-#
-# gnuplot script.
+#!/usr/bin/gnuplot
 #
 set terminal x11 size 800, 600
 #
