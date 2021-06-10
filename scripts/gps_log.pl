@@ -12,8 +12,8 @@ my(@gga,@rmc,@gsa);
 my($raw_time,$raw_date,$raw_lat,$raw_long);
 my($hdop,$hdop2,$vdop,$fix) = (99.99,99.99,99.99,0);
 my($zulu,$hours,$mins,$secs,$dsecs,$daysecs,$start,$elapsed,$offset);
-my($latitude,$ns,$longitude,$ew,$date,$time,$alt_msl,$speed,$heading,$sats) = (0.0,'N',0.0,'E','','',0,0,0,0);
-my($max_speed,$max_alt_msl,$base_alt) = (0,0,0);
+my($latitude,$ns,$longitude,$ew,$date,$time,$alt_msl,$speed_kn,$heading,$sats) = (0.0,'N',0.0,'E','','',0,0,0,0);
+my($max_kn,$max_alt_msl,$base_alt,$speed_ms) = (0,0,0,0);
 my($lines,$max_line_length,$longest_line) = (0,0,'');
 my($GPX,$TSV);
 
@@ -41,7 +41,7 @@ if ($^O eq 'MSWin32') {
     open($TSV,"> $tsv_file") || die "Cannot open tsv file: $!";
 }
 
-print $TSV "zulu\telapsed\taltitude\tsats\thdop\tvdop\n";
+print $TSV "zulu\telapsed\taltitude\tsats\thdop\tvdop\tm/s\n";
 
 #
 
@@ -107,7 +107,7 @@ while (<>) {
             $dsecs   = $4;
             $daysecs = ($hours * 3600) + ($mins * 60) + $secs + (0.1 * $dsecs); 
             
-            $time  = "${hours}:${mins}:${secs}.${dsecs}";
+            $time = sprintf("%02d:%02d:%02d.%d0",$hours,$mins,$secs,$dsecs);
 
             if (!$start) {
                 $start = $daysecs;
@@ -151,9 +151,9 @@ while (<>) {
             $zulu = "${date}T${time}Z";
             
             print $GPX sprintf("      <trkpt lat=\"%.6f\" lon=\"%.6f\">",$latitude,$longitude);
-            print $GPX "<time>$zulu</time><ele>${alt_msl}</ele><speed>${speed}</speed><course>${heading}</course><sat>${sats}</sat></trkpt>\n";
+            print $GPX "<time>$zulu</time><ele>${alt_msl}</ele><speed>${speed_ms}</speed><course>${heading}</course><sat>${sats}</sat></trkpt>\n";
 
-            print $TSV "${zulu}\t${elapsed}\t${alt_msl}\t${sats}\t${hdop}\t${vdop}\n";
+            print $TSV "${zulu}\t${elapsed}\t${alt_msl}\t${sats}\t${hdop}\t${vdop}\t${speed_ms}\n";
         }
     }
 
@@ -161,7 +161,7 @@ while (<>) {
 
         @rmc = split(',',$line);
 
-        $speed    = $rmc[7];
+        $speed_kn = $rmc[7];
         $heading  = $rmc[8];
         $raw_date = $rmc[9];
     
@@ -170,9 +170,11 @@ while (<>) {
             $date = $3 + 2000 . "-${2}-${1}";
         }
 
-        if ($speed > $max_speed) {
+        $speed_ms = sprintf("%.1f",$speed_kn * 0.514444);
 
-            $max_speed = $speed;
+        if ($speed_kn > $max_kn) {
+
+            $max_kn = $speed_kn;
         }
     }
 
@@ -194,11 +196,11 @@ EndOfFooter
 
 print STDERR "\n${lines} lines read, max line length was ${max_line_length}\n${longest_line}\n";
 
-my $mph    = int($max_speed   * 1.15);
-my $kph    = int($max_speed   * 1.85);
+my $mph    = int($max_kn      * 1.15);
+my $kph    = int($max_kn      * 1.85);
 my $alt_ft = int($max_alt_msl * 3.28084);
 
-print STDERR sprintf("%3d knots (%d mph)\n",$max_speed,$mph);
+print STDERR sprintf("%3d knots (%d mph)\n",$max_kn,$mph);
 print STDERR sprintf("%3d m MSL (%d ft, %d m AGL)\n",
                      $max_alt_msl,$alt_ft,$max_alt_msl - $base_alt);
 
