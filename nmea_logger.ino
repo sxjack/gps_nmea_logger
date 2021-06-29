@@ -11,7 +11,10 @@
  *
  * Changes
  * 
- * June '21 Added filename options.
+ * 28 June '21 Got it running on an Adafruit M0 Adalogger 
+ *             (need to reduce the SPI speed to 8 MHz).
+ *
+ * June '21    Added filename options.
  *
  * Notes
  *
@@ -49,14 +52,14 @@
 
 /*
  * 0 -> YYYYMMDD.nnn, if FILENAME_EXTN is defined it will be added to the end.
- * 2 -> LOGnnnnn.TXT (not implemented)
+ * 2 -> LOG_nnnn.TXT, sequence number stored in COUNTER.TXT.
  *
 */
 #define FILENAME_STYLE        0
 #define FILENAME_EXTN    ".txt"
 #define FILENAME_LEN         20
 
-// Processor specific configuration.
+// Processor specific configurations. //
 
 #if defined(ARDUINO_ARCH_ESP32)
 #define USE_SDFAT             0
@@ -67,7 +70,7 @@
 #define FILE_MODE    FILE_WRITE
 #endif
 
-#if defined(ARDUINO_AVR_PRO) || defined(ARDUINO_AVR_UNO)
+#if defined(ARDUINO_AVR_PRO) || defined(ARDUINO_AVR_UNO) /////
 
 #define SD_BUFFER_SIZE      256
 #define GPS_SERIAL       Serial
@@ -78,28 +81,37 @@
 
 const int status_LED = 6, LED_sense = 0;
 
-#elif defined(ARDUINO_SAMD_ZERO)
+#elif defined(ARDUINO_SAMD_ZERO)            /////
+
+#include "wiring_private.h"
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial1
 #define BAUD_RATE         38400
 #define GPS_RATE            500 // ms
+
 #if defined(ADAFRUIT_FEATHER_M0)
 #define SD_CS                 4
-// #define SD_CD                 7
-// #define DEBUG_SERIAL     Serial
+#define SD_CD                 7
+#define DEBUG_SERIAL    Serial3
 #define PASSTHROUGH      Serial
+#define FIX_LED              13
+#define STATUS_LED            8
+#define SD_CONFIG     SdSpiConfig(SD_CS,DEDICATED_SPI,SD_SCK_MHZ(8))
 #else
 #define SD_CS                 7
 // #define DEBUG_SERIAL  SerialUSB
 #define PASSTHROUGH   SerialUSB
-#endif
-#define PASSTHROUGH_BAUD 115200
 #define FIX_LED               5
+#endif
 
-const int status_LED = 6, LED_sense = 0;
+#define PASSTHROUGH_BAUD 115200
 
-#elif defined(ARDUINO_ESP32_DEV)
+Uart Serial3(&sercom1,11,10,SERCOM_RX_PAD_0,UART_TX_PAD_2); // TX on D10, RX on D11
+
+const int status_LED = STATUS_LED, LED_sense = 0;
+
+#elif defined(ARDUINO_ESP32_DEV)            /////
 
 #define SD_BUFFER_SIZE     4096
 #define GPS_SERIAL      Serial2
@@ -112,7 +124,7 @@ const int status_LED = 6, LED_sense = 0;
 
 const int status_LED = 2, LED_sense = 0;
 
-#elif defined(ARDUINO_ESP8266_WEMOS_D1MINI)
+#elif defined(ARDUINO_ESP8266_WEMOS_D1MINI) /////
 
 #warning "Doesn't work properly on the ESP8266 WeMos D1 Mini."
 
@@ -125,7 +137,7 @@ const int status_LED = 2, LED_sense = 0;
 // Don't use D4 for the status LED.
 const int status_LED = -1, LED_sense = 0;
 
-#elif defined(ARDUINO_BLUEPILL_F103C8) || defined(ARDUINO_BLUEPILL_F103CB)
+#elif defined(ARDUINO_BLUEPILL_F103C8) || defined(ARDUINO_BLUEPILL_F103CB) /////
 
 // Works well on the Blue Pill. 
 
@@ -150,7 +162,7 @@ HardwareSerial Serial3(PB11,PB10);
 
 #endif
 
-#if USE_SDFAT && defined(SD_CS)
+#if USE_SDFAT && defined(SD_CS) && not defined(SD_CONFIG)
 #define SD_CONFIG SdSpiConfig(SD_CS,DEDICATED_SPI,SD_SCK_MHZ(16))
 #endif
 
@@ -219,6 +231,11 @@ void setup() {
 #if defined(DEBUG_SERIAL)
 
   DEBUG_SERIAL.begin(115200);
+
+#if defined(ARDUINO_SAMD_ZERO)
+  pinPeripheral(10,PIO_SERCOM);
+  pinPeripheral(11,PIO_SERCOM);
+#endif
 
   for (i = 0; i < 10; ++i) {
 
@@ -811,6 +828,19 @@ void dateTimeCallback(uint16_t* date,uint16_t* time,uint8_t* ms10) {
   *ms10 = 0;
 
   return;
+}
+
+#endif
+
+/*
+ * 
+ */
+
+#if defined(ARDUINO_SAMD_ZERO)
+
+void SERCOM1_Handler() {
+
+  Serial3.IrqHandler();
 }
 
 #endif
