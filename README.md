@@ -29,3 +29,6 @@ directory.
 ![OpenLog and BN-220](images/logger.jpg)
 
 ![Logged data converted to gpx and displayed in Google Earth](images/gps_log.jpg)
+
+`nmea_logger.sparkfun_openlog.hex` is compiled for the SparkFun OpenLog. The command to upload 
+it will be something like `C:\Users\xxxx\AppData\Local\Arduino15\packages\arduino\tools\avrdude\6.3.0-arduino17/bin/avrdude -CC:\Users\xxxx\AppData\Local\Arduino15\packages\arduino\tools\avrdude\6.3.0-arduino17/etc/avrdude.conf -v -patmega328p -carduino -PCOM44 -b115200 -D -Uflash:w:nmea_logger.sparkfun_openlog.hex:i` but the path and com port will need changing.
